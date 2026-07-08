@@ -1,0 +1,98 @@
+# ===========================================================
+# Stage 1: Build C++ Pipeline Binary (vdt_app) for Linux (GPU)
+# ===========================================================
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS cpp-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build tools + C++ dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build \
+    libgdal-dev libopencv-dev \
+    wget ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download ONNX Runtime GPU for Linux (Version 1.26.0 matching Windows)
+RUN mkdir -p /opt/onnxruntime && \
+    wget -q https://github.com/microsoft/onnxruntime/releases/download/v1.26.0/onnxruntime-linux-x64-gpu-1.26.0.tgz \
+    -O /tmp/ort.tgz && \
+    tar xzf /tmp/ort.tgz -C /opt/onnxruntime --strip-components=1 && \
+    rm /tmp/ort.tgz
+
+# Copy C++ source code (excluding Windows build folder)
+COPY core_backend/common /app/core_backend/common
+COPY core_backend/tiling /app/core_backend/tiling
+COPY core_backend/inference /app/core_backend/inference
+COPY core_backend/storage /app/core_backend/storage
+COPY core_backend/pipeline /app/core_backend/pipeline
+COPY core_backend/main.cpp /app/core_backend/main.cpp
+COPY core_backend/CMakeLists.docker.txt /app/core_backend/CMakeLists.txt
+
+# Copy model file
+COPY core_backend/models /app/core_backend/models
+
+WORKDIR /app/core_backend
+
+# Build vdt_app for Linux
+RUN mkdir -p build && cd build && \
+    cmake .. -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH="/opt/onnxruntime" && \
+    ninja
+
+# ===========================================================
+# Stage 2: Build NestJS Backend
+# ===========================================================
+FROM node:20-slim AS nest-builder
+
+WORKDIR /app/web/backend
+
+COPY web/backend/package.json web/backend/package-lock.json ./
+RUN npm ci --ignore-scripts
+
+COPY web/backend/ .
+RUN npm run build
+
+# ===========================================================
+# Stage 3: Runtime (Backend + C++ Pipeline)
+# ===========================================================
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install runtime dependencies for GDAL, OpenCV, ONNX Runtime, and Node.js
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgdal30 libopencv-core4.5d libopencv-imgproc4.5d \
+    libgomp1 \
+    curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js 20.x
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy ONNX Runtime shared libraries
+COPY --from=cpp-builder /opt/onnxruntime/lib /opt/onnxruntime/lib
+ENV LD_LIBRARY_PATH="/opt/onnxruntime/lib:${LD_LIBRARY_PATH}"
+
+WORKDIR /app
+
+# Copy C++ binary & model
+COPY --from=cpp-builder /app/core_backend/build/vdt_app /app/core_backend/build/vdt_app
+COPY --from=cpp-builder /app/core_backend/models /app/core_backend/models
+
+# Copy NestJS built backend
+COPY --from=nest-builder /app/web/backend/dist /app/web/backend/dist
+COPY --from=nest-builder /app/web/backend/node_modules /app/web/backend/node_modules
+COPY --from=nest-builder /app/web/backend/package.json /app/web/backend/package.json
+
+# Create upload directory
+RUN mkdir -p /app/BigImageUpload
+
+# Configuration will be passed at runtime via env_file or environment variables
+
+EXPOSE 3001
+
+WORKDIR /app/web/backend
+CMD ["node", "dist/main"]

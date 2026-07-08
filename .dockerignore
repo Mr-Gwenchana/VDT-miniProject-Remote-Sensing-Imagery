@@ -1,0 +1,18 @@
+# Windows build artifacts
+core_backend/build/
+
+# Node modules (will be installed fresh in Docker)
+web/frontend/node_modules/
+web/frontend/.next/
+web/backend/node_modules/
+web/backend/dist/
+
+# Demo/test folders
+core_backend/demo_inference/
+core_backend/demo_tile/
+
+# Git
+.git/
+
+# Scripts
+scripts/
