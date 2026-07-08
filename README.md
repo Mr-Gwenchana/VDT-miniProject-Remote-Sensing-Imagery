@@ -77,14 +77,21 @@ Sau khi hệ thống khởi động thành công, truy cập qua trình duyệt:
 ```text
 VDT-miniProject-Remote-Sensing-Imagery/
 ├── core_backend/        # Lõi xử lý C++ đa luồng (Tiler, Inference Engine, PostGIS Writer)
-│   └── models/          # Thư mục đặt tệp mô hình .onnx tải về từ Deepness Zoo
-├── web/                 # Dịch vụ Web bổ trợ
-│   ├── backend/         # Node.js API (Tiếp nhận ảnh GeoTIFF, điều phối pipeline)
-│   └── frontend/        # Next.js / React Web GIS Dashboard
-├── docs/                # Tài liệu báo cáo học thuật chuyên sâu (Chương 1 - Chương 7)
-├── scripts/             # Các tập lệnh tiện ích kiểm thử hệ thống
+│   ├── common/          # Cấu trúc dữ liệu dùng chung (TileData, ThreadSafeQueue)
+│   ├── inference/       # Khối suy luận AI trên GPU (ONNX Runtime CUDA Provider)
+│   ├── pipeline/        # Khối điều phối luồng song song Producer-Consumer
+│   ├── storage/         # Khối ghi dữ liệu vector không gian vào PostGIS (GDAL/OGR)
+│   ├── tiling/          # Khối chia mảnh ảnh GeoTIFF khổ lớn (GDAL Tiler)
+│   ├── models/          # Thư mục đặt tệp mô hình .onnx (người dùng tự tải về từ Deepness Zoo)
+│   ├── CMakeLists.txt   # Cấu hình biên dịch CMake cho C++ Core-Backend
+│   └── main.cpp         # Điểm khởi chạy chính của tiến trình C++
+├── web/                 # Phân hệ Dịch vụ Web bổ trợ
+│   ├── backend/         # Node.js API Service (Tiếp nhận ảnh GeoTIFF, điều phối pipeline C++)
+│   └── frontend/        # Next.js / React Web GIS Dashboard (Bản đồ hiển thị đa giác)
 ├── Dockerfile.backend   # Cấu hình Docker cho Backend & C++ Core
 ├── Dockerfile.frontend  # Cấu hình Docker cho Next.js Frontend
 ├── docker-compose.yml   # Khởi chạy toàn bộ hệ thống kèm hỗ trợ GPU NVIDIA
-└── .env.example         # Tệp mẫu cấu hình biến môi trường
+├── .env.example         # Tệp mẫu cấu hình biến môi trường
+├── .gitignore           # Quy tắc loại trừ tệp biên dịch, .env mật mã và mô hình AI
+└── .dockerignore        # Quy tắc loại trừ tệp khi đóng gói Docker container
 ```
